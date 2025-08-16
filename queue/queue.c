@@ -72,13 +72,6 @@ int queue_append (queue_t **queue, queue_t *elem)
     return 0;
 }
 
-// Remove o elemento indicado da fila, sem o destruir.
-// Condicoes a verificar, gerando msgs de erro:
-// - a fila deve existir --
-// - a fila nao deve estar vazia --
-// - o elemento deve existir --
-// - o elemento deve pertencer a fila indicada
-// Retorno: 0 se sucesso, <0 se ocorreu algum erro
 int queue_remove (queue_t **queue, queue_t *elem)
 {
     // Vendo se a fila existe
@@ -147,4 +140,27 @@ int queue_remove (queue_t **queue, queue_t *elem)
     elem->next = NULL;
 
     return 0;
+}
+
+void queue_print (char *name, queue_t *queue, void print_elem (void*) )
+{
+    printf("%s: [", name);
+
+    if (queue)
+    {
+        int size = queue_size(queue);
+        queue_t* current = queue;
+
+        for (int i = 0; i < size; i++)
+        {
+            print_elem(current);
+
+            if (i < size - 1)
+                printf(" ");
+
+            current = current->next;
+        }
+    }
+
+    printf("]\n");
 }
