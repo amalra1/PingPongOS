@@ -29,10 +29,10 @@ int queue_size (queue_t *queue)
 
 int queue_append (queue_t **queue, queue_t *elem)
 {
-    // Vendo se a fila não é NULL
+    // Vendo se a fila existe
     if (!queue)
     {
-        fprintf(stderr, "A fila é nula.\n");
+        fprintf(stderr, "A fila não existe.\n");
         return -1;
     }
 
@@ -68,6 +68,83 @@ int queue_append (queue_t **queue, queue_t *elem)
         elem->next = head;
         head->prev = elem;
     }
+
+    return 0;
+}
+
+// Remove o elemento indicado da fila, sem o destruir.
+// Condicoes a verificar, gerando msgs de erro:
+// - a fila deve existir --
+// - a fila nao deve estar vazia --
+// - o elemento deve existir --
+// - o elemento deve pertencer a fila indicada
+// Retorno: 0 se sucesso, <0 se ocorreu algum erro
+int queue_remove (queue_t **queue, queue_t *elem)
+{
+    // Vendo se a fila existe
+    if (!queue)
+    {
+        fprintf(stderr, "A fila não existe.\n");
+        return -1;
+    }
+
+    // Vendo se o elemento não é NULL
+    if (!elem)
+    {
+        fprintf(stderr, "O elemento a ser adicionado é nulo.\n");
+        return -2;
+    }
+
+    // Vendo se a fila está vazia
+    if (*queue == NULL)
+    {
+        fprintf(stderr, "A fila não pode estar vazia.\n");
+        return -4;
+    }
+
+    // Vendo se o elemento a ser removido pertence a fila
+    queue_t* current;
+    int belongs = 0;
+
+    // Caso dele ser o topo da fila
+    if (*queue == elem)
+        belongs = 1;
+    else 
+    {
+        current = (*queue)->next;
+
+        while (current != *queue) 
+        {
+            if (current == elem) 
+            {
+                belongs = 1;
+                break;
+            }
+            current = current->next;
+        }
+    }
+    
+    if (!belongs) 
+    {
+        fprintf(stderr, "ERRO: O elemento não pertence à fila indicada.\n");
+        return -5;
+    }
+
+    // Se for o único da fila
+    if (elem->next == elem)
+        *queue = NULL; 
+    else
+    {
+        elem->prev->next = elem->next;
+        elem->next->prev = elem->prev;
+
+        // Se for o topo da fila
+        if (*queue == elem)
+            *queue = elem->next;
+    }
+
+    elem->prev = NULL;
+    elem->next = NULL;
 
     return 0;
 }
