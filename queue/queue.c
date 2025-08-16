@@ -9,6 +9,12 @@ GRR: 20206145
 #include <stdio.h>
 #include "queue.h"
 
+#define ERR_FILA_NAO_EXISTE -1;
+#define ERR_ELEM_NULO -2;
+#define ERR_ELEM_EM_OUTRA_FILA -3;
+#define ERR_FILA_VAZIA -4;
+#define ERR_ELEM_NAO_PERTENCE_A_FILA -5;
+
 int queue_size (queue_t *queue)
 {
     // Fila vazia
@@ -33,21 +39,21 @@ int queue_append (queue_t **queue, queue_t *elem)
     if (!queue)
     {
         fprintf(stderr, "A fila não existe.\n");
-        return -1;
+        return ERR_FILA_NAO_EXISTE;
     }
 
     // Vendo se o elemento não é NULL
     if (!elem)
     {
         fprintf(stderr, "O elemento a ser adicionado é nulo.\n");
-        return -2;
+        return ERR_ELEM_NULO;
     }
 
     // Vendo se o elemento já está em outra fila
     if (elem->prev != NULL || elem->next != NULL)
     {
         fprintf(stderr, "O elemento já pertence a uma fila.\n");
-        return -3;
+        return ERR_ELEM_EM_OUTRA_FILA;
     }
 
     // Fila vazia, o elemento recebe os dois ponteiros
@@ -78,21 +84,21 @@ int queue_remove (queue_t **queue, queue_t *elem)
     if (!queue)
     {
         fprintf(stderr, "A fila não existe.\n");
-        return -1;
+        return ERR_FILA_NAO_EXISTE;
     }
 
     // Vendo se o elemento não é NULL
     if (!elem)
     {
         fprintf(stderr, "O elemento a ser adicionado é nulo.\n");
-        return -2;
+        return ERR_ELEM_NULO;
     }
 
     // Vendo se a fila está vazia
     if (*queue == NULL)
     {
         fprintf(stderr, "A fila não pode estar vazia.\n");
-        return -4;
+        return ERR_FILA_VAZIA;
     }
 
     // Vendo se o elemento a ser removido pertence a fila
@@ -120,7 +126,7 @@ int queue_remove (queue_t **queue, queue_t *elem)
     if (!belongs) 
     {
         fprintf(stderr, "O elemento não pertence à fila indicada.\n");
-        return -5;
+        return ERR_ELEM_NAO_PERTENCE_A_FILA;
     }
 
     // Se for o único da fila
