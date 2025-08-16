@@ -119,7 +119,7 @@ int queue_remove (queue_t **queue, queue_t *elem)
     
     if (!belongs) 
     {
-        fprintf(stderr, "ERRO: O elemento não pertence à fila indicada.\n");
+        fprintf(stderr, "O elemento não pertence à fila indicada.\n");
         return -5;
     }
 
