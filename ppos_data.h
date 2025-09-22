@@ -18,6 +18,8 @@ typedef struct task_t
   ucontext_t context ;			// contexto armazenado da tarefa
   short status ;			// pronta, rodando, suspensa, ...
   int vg_id ;
+  int static_prio;    // Prioridade estática da tarefa
+  int dyn_prio;   // Prioridade dinâmica da tarefa (afetada pelo aging)
 } task_t ;
 
 // estrutura que define um semáforo

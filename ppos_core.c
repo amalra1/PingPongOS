@@ -17,6 +17,10 @@ GRR: 20206145
 #define TASK_TERMINADA 1
 #define TASK_SUSPENSA 2
 
+#define FATOR_ENVELHECIMENTO -1
+#define PRIOR_MIN -20
+#define PRIOR_MAX 20 
+
 task_t taskMain;         // Descritor da tarefa principal
 task_t *taskAtual;       // Ponteiro para a tarefa atual
 task_t taskDispatcher;
@@ -27,15 +31,39 @@ int next_id = 1;         // Contador para gerar IDs de novas tarefas (main é a 
 void dispatcher (void *arg);
 task_t* scheduler ();
 
-// FCFS (First Come First Served)
+// Por prioridade dinâmica
 task_t* scheduler () {
     if (!readyQueue)
         return NULL;
 
-    // Pega a próxima pra ser executada
-    task_t* nextTask = (task_t*) readyQueue;
-    queue_remove(&readyQueue, (queue_t*) nextTask);
-    return nextTask;
+    task_t *current = (task_t*) readyQueue;
+    task_t *task_maior_prior = current;
+
+    // Encontra a tarefa com a maior prioridade (menor valor de dyn_prio pelo aging definido)
+    for (int i = 0; i < queue_size((queue_t*) readyQueue); i++) {
+        if (current->dyn_prio < task_maior_prior->dyn_prio)
+            task_maior_prior = current;
+
+        current = current->next;
+    }
+
+    // Faz o aging em todas as outras tarefas
+    current = (task_t*) readyQueue;
+    for (int i = 0; i < queue_size((queue_t*) readyQueue); i++) {
+        if (current != task_maior_prior) {
+            current->dyn_prio += FATOR_ENVELHECIMENTO;
+            if (current->dyn_prio < -20)
+                current->dyn_prio = -20;
+        }
+        current = current->next;
+    }
+
+    // Reseta a prioridade dinâmica da tarefa escolhida para sua prioridade estática
+    task_maior_prior->dyn_prio = task_maior_prior->static_prio;
+
+    // Remove a tarefa escolhida da fila e a retorna
+    queue_remove(&readyQueue, (queue_t*) task_maior_prior);
+    return task_maior_prior;
 }
 
 void dispatcher (void *arg) {
@@ -114,6 +142,9 @@ int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
     task->id = next_id++;
     task->status = TASK_PRONTA;
 
+    task->static_prio = 0;
+    task->dyn_prio = 0;
+
     if (task != &taskDispatcher) {
         queue_append(&readyQueue, (queue_t*)task);
         userTasks++;
@@ -176,4 +207,27 @@ void task_exit (int exit_code) {
 
 int task_id () {
     return taskAtual->id;
+}
+
+int task_getprio (task_t *task) {
+
+    if (!task)
+        return taskAtual->static_prio;
+    return task->static_prio;
+}
+
+void task_setprio (task_t *task, int prio) {
+
+    if (!task)
+        task = taskAtual;
+
+    // Mantém as prioridades dentro do intervalo caso ultrapassem
+    if (prio < PRIOR_MIN) 
+        prio = PRIOR_MIN;
+
+    else if (prio > PRIOR_MAX) 
+        prio = PRIOR_MAX;
+
+    task->static_prio = prio;
+    task->dyn_prio = prio;
 }
