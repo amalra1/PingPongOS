@@ -5,10 +5,11 @@ Nome: Pedro Amaral Chapelin
 GRR: 20206145
 
 */
+#include "ppos.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include "ppos_data.h"
-#include "ppos.h"
+#include <signal.h>
+#include <sys/time.h>
 #include "queue/queue.h"
 
 #define STACKSIZE 64*1024	/* tamanho de pilha das threads */
@@ -21,6 +22,10 @@ GRR: 20206145
 #define PRIOR_MIN -20
 #define PRIOR_MAX 20 
 
+#define QUANTUM_DEFAULT 20
+#define SYSTEM_TASK 0
+#define USER_TASK 1
+
 task_t taskMain;         // Descritor da tarefa principal
 task_t *taskAtual;       // Ponteiro para a tarefa atual
 task_t taskDispatcher;
@@ -28,8 +33,21 @@ queue_t *readyQueue = NULL;
 int userTasks = 0;       // Quantidade de tasks
 int next_id = 1;         // Contador para gerar IDs de novas tarefas (main é a 0)
 
+struct sigaction action;
+struct itimerval timer;
+
 void dispatcher (void *arg);
 task_t* scheduler ();
+
+void tick_handler(int signum) {
+
+    if (taskAtual->task_type == USER_TASK) {
+        taskAtual->quantum_ticks--;
+
+        if (taskAtual->quantum_ticks <= 0)
+            task_yield();
+    }
+}
 
 // Por prioridade dinâmica
 task_t* scheduler () {
@@ -75,6 +93,7 @@ void dispatcher (void *arg) {
             #ifdef DEBUG
             printf("dispatcher: ativando tarefa %d\n", nextTask->id);
             #endif
+            nextTask->quantum_ticks = QUANTUM_DEFAULT;
             task_switch(nextTask);
 
             switch(nextTask->status) {
@@ -103,9 +122,31 @@ void ppos_init () {
     // Inicia o id da main como 0 e aponta a atual para a da main
     taskMain.id = 0;
     taskAtual = &taskMain;
+    taskMain.task_type = USER_TASK;
+    taskMain.quantum_ticks = QUANTUM_DEFAULT;
 
     // Para ter um ponto de retorno para a da main
     getcontext(&taskMain.context); 
+
+    // Registra a ação para o sinal de timer SIGALRM
+    action.sa_handler = tick_handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    if (sigaction(SIGALRM, &action, 0) < 0) {
+        perror("Erro em sigaction");
+        exit(1);
+    }
+
+    // Configura o timer para chamar a cada 1ms
+    timer.it_value.tv_usec = 1000;      // Primeiro chamada
+    timer.it_value.tv_sec  = 0;
+    timer.it_interval.tv_usec = 1000;       // Chamadas seguintes
+    timer.it_interval.tv_sec  = 0;
+
+    if (setitimer(ITIMER_REAL, &timer, 0) < 0) {
+        perror("Erro em setitimer");
+        exit(1);
+    }
 
     // Cria o dispatcher
     task_init(&taskDispatcher, dispatcher, NULL);
@@ -141,11 +182,16 @@ int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
 
     task->id = next_id++;
     task->status = TASK_PRONTA;
-
     task->static_prio = 0;
     task->dyn_prio = 0;
 
-    if (task != &taskDispatcher) {
+    // Define o tipo da tarefa
+    if (task == &taskDispatcher)
+        task->task_type = SYSTEM_TASK;
+    else
+        task->task_type = USER_TASK;
+
+    if (task != &taskDispatcher && task != &taskMain) {
         queue_append(&readyQueue, (queue_t*)task);
         userTasks++;
     }
@@ -179,7 +225,9 @@ int task_switch (task_t *task) {
 void task_yield () {
     // Coloca no fim da fila de prontas
     taskAtual->status = TASK_PRONTA;
-    queue_append(&readyQueue, (queue_t*)taskAtual);
+
+    if (taskAtual != &taskMain)
+        queue_append(&readyQueue, (queue_t*)taskAtual);
 
     // Devolve o controle pro dispatcher
     task_switch(&taskDispatcher);

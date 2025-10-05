@@ -7,6 +7,8 @@
 #ifndef __PPOS_DATA__
 #define __PPOS_DATA__
 
+#define _XOPEN_SOURCE 600  // Não posso mexer na ppos.h, então adicionei esse define aqui para reconhecer na ppos_core.c
+
 #include <ucontext.h>		// biblioteca POSIX de trocas de contexto
 #include <valgrind/valgrind.h>
 
@@ -20,6 +22,8 @@ typedef struct task_t
   int vg_id ;
   int static_prio;    // Prioridade estática da tarefa
   int dyn_prio;   // Prioridade dinâmica da tarefa (afetada pelo aging)
+  int quantum_ticks;    // Contador de ticks do quantum da tarefa
+  char task_type;   // Tipo da tarefa (de sistema ou de usuário)
 } task_t ;
 
 // estrutura que define um semáforo

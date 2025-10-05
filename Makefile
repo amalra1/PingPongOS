@@ -2,14 +2,14 @@
 # GRR20206145
 
 CC = cc
-CFLAGS = -Wall -I -g.
+CFLAGS = -Wall -g -I.
 DFLAGS = -DDEBUG
 TARGET = ppos
 SOURCES = ppos_core.c main.c queue/queue.c
 HEADERS = ppos.h ppos_data.h queue/queue.h
 OBJECTS = $(SOURCES:.c=.o)
-PROJECT_DIR = p4
-TGZ_FILE = p4.tgz
+PROJECT_DIR = p5
+TGZ_FILE = p5.tgz
 
 .PHONY: all debug clean dist
 all: $(TARGET)
