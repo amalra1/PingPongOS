@@ -22,7 +22,7 @@ GRR: 20206145
 #define PRIOR_MIN -20
 #define PRIOR_MAX 20 
 
-#define QUANTUM_DEFAULT 20
+#define QUANTUM_DEFAULT 10
 #define SYSTEM_TASK 0
 #define USER_TASK 1
 
@@ -33,6 +33,8 @@ queue_t *readyQueue = NULL;
 int userTasks = 0;       // Quantidade de tasks
 int next_id = 1;         // Contador para gerar IDs de novas tarefas (main é a 0)
 
+static unsigned int system_clock = 0;
+
 struct sigaction action;
 struct itimerval timer;
 
@@ -40,6 +42,11 @@ void dispatcher (void *arg);
 task_t* scheduler ();
 
 void tick_handler(int signum) {
+
+    system_clock++;
+
+    if (taskAtual)
+        taskAtual->processor_time++;
 
     if (taskAtual->task_type == USER_TASK) {
         taskAtual->quantum_ticks--;
@@ -90,18 +97,11 @@ void dispatcher (void *arg) {
     while (userTasks > 0) {
         nextTask = scheduler();
         if (nextTask) {
-            #ifdef DEBUG
-            printf("dispatcher: ativando tarefa %d\n", nextTask->id);
-            #endif
             nextTask->quantum_ticks = QUANTUM_DEFAULT;
             task_switch(nextTask);
 
             switch(nextTask->status) {
                 case TASK_TERMINADA:
-                    #ifdef DEBUG
-                        printf("dispatcher: tarefa %d terminada, liberando sua pilha.\n", nextTask->id);
-                    #endif
-
                     VALGRIND_STACK_DEREGISTER(nextTask->vg_id);
                     free(nextTask->context.uc_stack.ss_sp);
                     break;
@@ -127,6 +127,11 @@ void ppos_init () {
 
     // Para ter um ponto de retorno para a da main
     getcontext(&taskMain.context); 
+
+    // Inicializa a contabilização da main, já começa ativa
+    taskMain.execution_time = systime();
+    taskMain.processor_time = 0;
+    taskMain.activations = 1;
 
     // Registra a ação para o sinal de timer SIGALRM
     action.sa_handler = tick_handler;
@@ -185,6 +190,11 @@ int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
     task->static_prio = 0;
     task->dyn_prio = 0;
 
+    // Contabilização dos tempos da task, diferente da main começa com 0 ativações
+    task->execution_time = systime(); // Marca o tempo de criação
+    task->processor_time = 0;
+    task->activations = 0;
+
     // Define o tipo da tarefa
     if (task == &taskDispatcher)
         task->task_type = SYSTEM_TASK;
@@ -195,10 +205,6 @@ int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
         queue_append(&readyQueue, (queue_t*)task);
         userTasks++;
     }
-
-    #ifdef DEBUG
-        printf("task_init: iniciada tarefa %d\n", task->id);
-    #endif
 
     return task->id;
 }
@@ -212,9 +218,8 @@ int task_switch (task_t *task) {
     task_t *taskAnterior = taskAtual;
     taskAtual = task;
 
-    #ifdef DEBUG
-        printf("task_switch: trocando contexto %d -> %d\n", taskAnterior->id, taskAtual->id);
-    #endif
+    if (taskAtual)
+        taskAtual->activations++;
 
     // Salva o contexto da tarefa anterior e carrega o da nova tarefa
     swapcontext(&taskAnterior->context, &taskAtual->context);
@@ -235,9 +240,9 @@ void task_yield () {
 
 void task_exit (int exit_code) {
 
-    #ifdef DEBUG
-        printf("task_exit: tarefa %d sendo encerrada\n", task_id());
-    #endif
+    taskAtual->execution_time = systime() - taskAtual->execution_time;
+
+    printf("Task %d exit: execution time %u ms, processor time %u ms, %u activations\n", task_id(), taskAtual->execution_time, taskAtual->processor_time, taskAtual->activations);
 
     if (taskAtual == &taskDispatcher) {
         task_switch(&taskMain);
@@ -278,4 +283,8 @@ void task_setprio (task_t *task, int prio) {
 
     task->static_prio = prio;
     task->dyn_prio = prio;
+}
+
+unsigned int systime () {
+    return system_clock;
 }

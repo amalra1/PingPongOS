@@ -19,11 +19,14 @@ typedef struct task_t
   int id ;				// identificador da tarefa
   ucontext_t context ;			// contexto armazenado da tarefa
   short status ;			// pronta, rodando, suspensa, ...
-  int vg_id ;
+  int vg_id ;   // Valgrind
   int static_prio;    // Prioridade estática da tarefa
   int dyn_prio;   // Prioridade dinâmica da tarefa (afetada pelo aging)
   int quantum_ticks;    // Contador de ticks do quantum da tarefa
   char task_type;   // Tipo da tarefa (de sistema ou de usuário)
+  unsigned int execution_time;    // Tempo de vida total da tarefa
+  unsigned int processor_time;    // Tempo de processamento acumulado
+  unsigned int activations;   // Número de ativações da tarefa
 } task_t ;
 
 // estrutura que define um semáforo

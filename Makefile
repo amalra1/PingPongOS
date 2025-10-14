@@ -8,10 +8,10 @@ TARGET = ppos
 SOURCES = ppos_core.c main.c queue/queue.c
 HEADERS = ppos.h ppos_data.h queue/queue.h
 OBJECTS = $(SOURCES:.c=.o)
-PROJECT_DIR = p5
-TGZ_FILE = p5.tgz
+PROJECT_DIR = p6
+TGZ_FILE = p6.tgz
 
-.PHONY: all debug clean dist
+.PHONY: all clean dist
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
@@ -19,9 +19,6 @@ $(TARGET): $(OBJECTS)
 
 %.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
-
-debug:
-	$(MAKE) CFLAGS+="$(DFLAGS)" all
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) $(TGZ_FILE)
