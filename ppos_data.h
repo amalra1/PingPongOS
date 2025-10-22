@@ -27,6 +27,8 @@ typedef struct task_t
   unsigned int execution_time;    // Tempo de vida total da tarefa
   unsigned int processor_time;    // Tempo de processamento acumulado
   unsigned int activations;   // Número de ativações da tarefa
+  struct task_t *waiting_queue;   // Ponteiro para a fila de tarefas esperando por esta
+  int exit_code;    // Código de encerramento retornado por task_exit
 } task_t ;
 
 // estrutura que define um semáforo

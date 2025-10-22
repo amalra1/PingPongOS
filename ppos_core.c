@@ -40,6 +40,7 @@ struct itimerval timer;
 
 void dispatcher (void *arg);
 task_t* scheduler ();
+void task_awake (task_t * task, task_t **queue);
 
 void tick_handler(int signum) {
 
@@ -48,7 +49,7 @@ void tick_handler(int signum) {
     if (taskAtual)
         taskAtual->processor_time++;
 
-    if (taskAtual->task_type == USER_TASK) {
+    if (taskAtual && taskAtual->task_type == USER_TASK) {
         taskAtual->quantum_ticks--;
 
         if (taskAtual->quantum_ticks <= 0)
@@ -94,7 +95,7 @@ task_t* scheduler () {
 void dispatcher (void *arg) {
     task_t *nextTask;
 
-    while (userTasks > 0) {
+    while (userTasks > 0 || readyQueue != NULL) {
         nextTask = scheduler();
         if (nextTask) {
             nextTask->quantum_ticks = QUANTUM_DEFAULT;
@@ -106,6 +107,7 @@ void dispatcher (void *arg) {
                     free(nextTask->context.uc_stack.ss_sp);
                     break;
                 case TASK_PRONTA:
+                case TASK_SUSPENSA:
                     break;
                 default:
                     break;
@@ -132,6 +134,7 @@ void ppos_init () {
     taskMain.execution_time = systime();
     taskMain.processor_time = 0;
     taskMain.activations = 1;
+    taskMain.waiting_queue = NULL;
 
     // Registra a ação para o sinal de timer SIGALRM
     action.sa_handler = tick_handler;
@@ -185,7 +188,8 @@ int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
     // Aponta a função start_routine para o contexto da task passada, passando os argumentos
     makecontext(&task->context, (void (*)(void))start_routine, 1, arg);
 
-    task->id = next_id++;
+    if (task != &taskMain)
+        task->id = next_id++;
     task->status = TASK_PRONTA;
     task->static_prio = 0;
     task->dyn_prio = 0;
@@ -195,10 +199,13 @@ int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
     task->processor_time = 0;
     task->activations = 0;
 
+    task->waiting_queue = NULL;
+    task->exit_code = 0;
+
     // Define o tipo da tarefa
     if (task == &taskDispatcher)
         task->task_type = SYSTEM_TASK;
-    else
+    else if (task != &taskMain)
         task->task_type = USER_TASK;
 
     if (task != &taskDispatcher && task != &taskMain) {
@@ -231,11 +238,47 @@ void task_yield () {
     // Coloca no fim da fila de prontas
     taskAtual->status = TASK_PRONTA;
 
-    if (taskAtual != &taskMain)
-        queue_append(&readyQueue, (queue_t*)taskAtual);
+    queue_append(&readyQueue, (queue_t*)taskAtual);
 
     // Devolve o controle pro dispatcher
     task_switch(&taskDispatcher);
+}
+
+void task_suspend (task_t **queue) {
+   
+    // queue_remove(&readyQueue, (queue_t*) taskAtual);
+
+    taskAtual->status = TASK_SUSPENSA;
+
+    // Se uma fila de espera foi fornecida, adiciona a tarefa atual nela
+    if (queue)
+        queue_append((queue_t**)queue, (queue_t*)taskAtual);
+
+    task_switch(&taskDispatcher);
+}
+
+void task_awake (task_t *task, task_t **queue) {
+    if (!task) 
+        return;
+
+    // Se uma fila foi fornecida, remove a tarefa dela
+    if (queue)
+        queue_remove((queue_t**)queue, (queue_t*)task);
+
+    task->status = TASK_PRONTA;
+    queue_append(&readyQueue, (queue_t*)task);
+}
+
+int task_wait (task_t *task) {
+    // Impede que uma tarefa espere por si mesma
+    if (!task || task == taskAtual || task->status == TASK_TERMINADA)
+        return (task ? task->exit_code : -1);
+
+    // Suspende a tarefa atual, colocando-a na fila de espera da tarefa
+    task_suspend((task_t**)&task->waiting_queue);
+
+    // Quando for acordada, a tarefa já terá terminado. Retorna seu código de saída.
+    return task->exit_code;
 }
 
 void task_exit (int exit_code) {
@@ -243,6 +286,17 @@ void task_exit (int exit_code) {
     taskAtual->execution_time = systime() - taskAtual->execution_time;
 
     printf("Task %d exit: execution time %u ms, processor time %u ms, %u activations\n", task_id(), taskAtual->execution_time, taskAtual->processor_time, taskAtual->activations);
+
+    taskAtual->exit_code = exit_code;
+    taskAtual->status = TASK_TERMINADA;
+
+    // Acorda todas as tarefas na fila de espera desta tarefa
+    while (taskAtual->waiting_queue) {
+        task_t *waiting_task = taskAtual->waiting_queue;
+
+        // Acorda a tarefa, remove da waiting_queue, marca como pronta e coloca na readyQueue
+        task_awake(waiting_task, &taskAtual->waiting_queue);
+    }
 
     if (taskAtual == &taskDispatcher) {
         task_switch(&taskMain);
@@ -253,7 +307,6 @@ void task_exit (int exit_code) {
     else
     {
         userTasks--;
-        taskAtual->status = TASK_TERMINADA;
         task_switch(&taskDispatcher);
     }
 }
