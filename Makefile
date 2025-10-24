@@ -8,8 +8,8 @@ TARGET = ppos
 SOURCES = ppos_core.c main.c queue/queue.c
 HEADERS = ppos.h ppos_data.h queue/queue.h
 OBJECTS = $(SOURCES:.c=.o)
-PROJECT_DIR = p6
-TGZ_FILE = p6.tgz
+PROJECT_DIR = p8
+TGZ_FILE = p8.tgz
 
 .PHONY: all clean dist
 all: $(TARGET)

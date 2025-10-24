@@ -5,11 +5,12 @@ Nome: Pedro Amaral Chapelin
 GRR: 20206145
 
 */
-#include "ppos.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <unistd.h>
+#include "ppos.h"
 #include "queue/queue.h"
 
 #define STACKSIZE 64*1024	/* tamanho de pilha das threads */
@@ -30,6 +31,7 @@ task_t taskMain;         // Descritor da tarefa principal
 task_t *taskAtual;       // Ponteiro para a tarefa atual
 task_t taskDispatcher;
 queue_t *readyQueue = NULL;
+queue_t *sleepingQueue = NULL;
 int userTasks = 0;       // Quantidade de tasks
 int next_id = 1;         // Contador para gerar IDs de novas tarefas (main é a 0)
 
@@ -94,25 +96,48 @@ task_t* scheduler () {
 
 void dispatcher (void *arg) {
     task_t *nextTask;
+    task_t *current_sleeping;
+    task_t *next_sleeping;
+    unsigned int now;
 
-    while (userTasks > 0 || readyQueue != NULL) {
+    while (userTasks > 0 || readyQueue != NULL || sleepingQueue != NULL) {
+
+        if (sleepingQueue) {
+            now = systime();
+            current_sleeping = (task_t*) sleepingQueue;
+            int size = queue_size(sleepingQueue);
+
+            for (int i = 0; i < size; ++i) {
+                next_sleeping = current_sleeping->next;
+                if (current_sleeping->wake_up_time <= now) {
+                    #ifdef DEBUG
+                    printf("dispatcher: acordando tarefa %d (wake_up_time: %u, now: %u)\n",
+                           current_sleeping->id, current_sleeping->wake_up_time, now);
+                    #endif
+                    task_awake(current_sleeping, (task_t**)&sleepingQueue);
+                }
+                if (!sleepingQueue) break;
+                current_sleeping = next_sleeping;
+                if (i > 0 && current_sleeping == (task_t*) sleepingQueue && size == queue_size(sleepingQueue)) break;
+            }
+        }
+
         nextTask = scheduler();
         if (nextTask) {
             nextTask->quantum_ticks = QUANTUM_DEFAULT;
             task_switch(nextTask);
-
             switch(nextTask->status) {
                 case TASK_TERMINADA:
                     VALGRIND_STACK_DEREGISTER(nextTask->vg_id);
                     free(nextTask->context.uc_stack.ss_sp);
                     break;
-                case TASK_PRONTA:
-                case TASK_SUSPENSA:
-                    break;
-                default:
-                    break;
+                case TASK_PRONTA: case TASK_SUSPENSA: break;
+                default: break;
             }
         }
+        else if (userTasks > 0 || sleepingQueue != NULL) {
+            pause();
+       }
     }
     task_exit(0);
 }
@@ -135,6 +160,7 @@ void ppos_init () {
     taskMain.processor_time = 0;
     taskMain.activations = 1;
     taskMain.waiting_queue = NULL;
+    taskMain.wake_up_time = 0;
 
     // Registra a ação para o sinal de timer SIGALRM
     action.sa_handler = tick_handler;
@@ -201,6 +227,7 @@ int task_init (task_t *task, void (*start_routine)(void *),  void *arg) {
 
     task->waiting_queue = NULL;
     task->exit_code = 0;
+    task->wake_up_time = 0;
 
     // Define o tipo da tarefa
     if (task == &taskDispatcher)
@@ -246,8 +273,6 @@ void task_yield () {
 
 void task_suspend (task_t **queue) {
    
-    // queue_remove(&readyQueue, (queue_t*) taskAtual);
-
     taskAtual->status = TASK_SUSPENSA;
 
     // Se uma fila de espera foi fornecida, adiciona a tarefa atual nela
@@ -275,10 +300,24 @@ int task_wait (task_t *task) {
         return (task ? task->exit_code : -1);
 
     // Suspende a tarefa atual, colocando-a na fila de espera da tarefa
-    task_suspend((task_t**)&task->waiting_queue);
+    task_suspend(&task->waiting_queue);
 
     // Quando for acordada, a tarefa já terá terminado. Retorna seu código de saída.
     return task->exit_code;
+}
+
+void task_sleep (int t) {
+
+    // Calcula o tempo futuro para acordar
+    taskAtual->wake_up_time = systime() + t;
+
+    #ifdef DEBUG
+    printf("task_sleep: tarefa %d dormindo por %d ms (até %u)\n",
+           task_id(), t, taskAtual->wake_up_time);
+    #endif
+
+    // Suspende a tarefa atual, colocando-a na fila de adormecidas
+    task_suspend((task_t**)&sleepingQueue);
 }
 
 void task_exit (int exit_code) {
@@ -298,14 +337,18 @@ void task_exit (int exit_code) {
         task_awake(waiting_task, &taskAtual->waiting_queue);
     }
 
+    // Se for a última user task
+    if (userTasks == 1 && taskAtual->task_type == USER_TASK)
+        while (sleepingQueue)
+            task_awake((task_t*) sleepingQueue, (task_t**)&sleepingQueue);
+
     if (taskAtual == &taskDispatcher) {
         task_switch(&taskMain);
     }
     else if (taskAtual == &taskMain) {
         task_switch(&taskDispatcher);
     }
-    else
-    {
+    else {
         userTasks--;
         task_switch(&taskDispatcher);
     }

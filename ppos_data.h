@@ -28,6 +28,7 @@ typedef struct task_t
   unsigned int processor_time;    // Tempo de processamento acumulado
   unsigned int activations;   // Número de ativações da tarefa
   struct task_t *waiting_queue;   // Ponteiro para a fila de tarefas esperando por esta
+  unsigned int wake_up_time;    // Tempo em ticks/ms em que a tarefa deve acordar
   int exit_code;    // Código de encerramento retornado por task_exit
 } task_t ;
 
